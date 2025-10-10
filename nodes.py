@@ -6,19 +6,53 @@ import json
 import plotly.io as pio
 from utils import figure_dict_to_json
 
+# def make_query_node(llm, tools):
+#     agent = create_query_agent(llm, tools)
+#     def node(state):
+#         question = state["question"]
+#         sql_result = None
+#         for step in agent.stream(
+#             {"messages": [{"role": "user", "content": question}]},
+#             stream_mode="values",
+#         ):
+#             for msg in step["messages"]:
+#                 if hasattr(msg, "name") and msg.name == "sql_db_query":
+#                     sql_result = msg.content if hasattr(msg, "content") else getattr(msg, "tool_output", None)
+#                 # TODO check to see if we can propogate the query to get the column names 
+#                 if hasattr(msg, "arguments"):
+#                     args = msg.arguments
+#                     if isinstance(args, str):
+#                         args = json.loads(args)
+#                         sql_query = args.get("query") or args.get("sql")
+#                         print("QUERY")
+#                         print(sql_query)
+
+#         return {**state, "sql_result": sql_result}
+#     return node
+
+# TODO this our better query agent call bc it removes the loop 
 def make_query_node(llm, tools):
     agent = create_query_agent(llm, tools)
+
     def node(state):
         question = state["question"]
-        sql_result = None
-        for step in agent.stream(
-            {"messages": [{"role": "user", "content": question}]},
-            stream_mode="values",
-        ):
-            for msg in step["messages"]:
-                if hasattr(msg, "name") and msg.name == "sql_db_query":
-                    sql_result = msg.content if hasattr(msg, "content") else getattr(msg, "tool_output", None)
+
+        # Run the agent synchronously
+        result = agent.invoke({"messages": [{"role": "user", "content": question}]})
+
+        # Extract the sql_db_query result if present
+        sql_msg = next(
+            (
+                msg for msg in result.get("messages", [])
+                if getattr(msg, "name", None) == "sql_db_query"
+            ),
+            None
+        )
+
+        sql_result = getattr(sql_msg, "content", getattr(sql_msg, "tool_output", None)) if sql_msg else None
+
         return {**state, "sql_result": sql_result}
+
     return node
 
 def make_plot_node(llm, tools):
@@ -26,6 +60,11 @@ def make_plot_node(llm, tools):
     def node(state):
         sql_result = state.get("sql_result")
         question = state.get("question")
+        # print("QUESTION")
+        # print(question)
+        # query_string = state.get("query")
+        # print("QUERY STRING")
+        # print(query_string)
         if sql_result:
             dict_list = convert_sql_result_to_dict(sql_result)
         else:

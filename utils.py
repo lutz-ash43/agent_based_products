@@ -5,6 +5,7 @@ import plotly.io as pio
 
 def convert_sql_result_to_dict(sql_result):
     tuple_list = ast.literal_eval(sql_result)
+    print(tuple_list)
     # Dynamically infer keys based on length of tuples
     keys = ["column_" + str(i) for i in range(len(tuple_list[0]))]
     dict_list = [dict(zip(keys, row)) for row in tuple_list]
