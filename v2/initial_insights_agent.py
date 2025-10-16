@@ -1,69 +1,51 @@
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from langchain.tools import tool
+from langgraph.prebuilt import create_react_agent
+from typing import List, Dict, Any, Optional
+import pandas as pd
+import plotly_express as px
 from databasemanager import DatabaseManager
 from llm_manager import LLMManager
+from langchain.chat_models import init_chat_model
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 import re
 
-class SQLAgent:
+class InitialInsightsAgent:
     def __init__(self):
         self.db_manager = DatabaseManager()
         self.llm_manager = LLMManager()
 
-    def parse_question(self, state: dict) -> dict:
+    def generate_initial_prompts(self, state: dict) -> dict:
         """Parse user question and identify relevant tables and columns."""
-        question = state['question']
         schema = self.db_manager.get_schema()
+        #plot_tools = [create_bar_chart, create_line_chart, create_scatter_plot]
+        initial_insight_prompt = ChatPromptTemplate.from_messages([
+            ("system", """
+        you are a an expert of the lab segmentation data product. This product is a
+        table with lab characteristics such as turna round time, lab type, market share and disease or biomarker relevant market share.
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", '''You are a data analyst that can help summarize SQL tables and parse user questions about a database. 
-                Given the question and database schema, identify the relevant tables and columns. 
-                If the question is not relevant to the database or if there is not enough information to answer the question, set is_relevant to false.
+        Additionally for each table there is information regarding all the disease or biomarker relevant assays a given lab performs or provides. 
+        These characteristics include what classification the assay is, what platform the assay uses if any, how the assay was developed, 
+        how it is performed and measured ect. 
 
-                Your response should be in the following JSON format:
-                {{
-                    "is_relevant": boolean,
-                    "relevant_tables": [
-                        {{
-                            "table_name": string,
-                            "columns": [string],
-                            "noun_columns": [string]
-                        }}
-                    ]
-                }}
-                '''),
-                            ("human", "===Database schema:\n{schema}\n\n===User question:\n{question}\n\nIdentify relevant tables and columns:")
+        Clients use this product to have an understanding about different lab market segments. These segments can be geographic such as where labs
+        that offer a certain assay or have a certain capability are located, how market share is dispersed or the availability of assays and platforms in different laboratory settings. 
+
+        using this context and the db provided as generate one question that might be helpful to understanding this database. This question will then be converted to sql and plotted
+        so ensure they are reasonable exploratory data question and will not require advanced analytics. 
+        """),
+
+            ("human", "generate a question to provide basic insights into this table"),
         ])
 
-        output_parser = JsonOutputParser()
-        print(schema)
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question)
-        parsed_response = output_parser.parse(response)
-        return {"parsed_question": parsed_response}
-
-    def get_unique_nouns(self, state: dict) -> dict:
-        """Find unique nouns in relevant tables and columns."""
-        parsed_question = state['parsed_question']
-        print(parsed_question)
-        if not parsed_question['is_relevant']:
-            return {"unique_nouns": []}
-
-        unique_nouns = set()
-        for table_info in parsed_question['relevant_tables']:
-            table_name = table_info['table_name']
-            noun_columns = table_info['noun_columns']
-            
-            if noun_columns:
-                column_names = ', '.join(f"`{col}`" for col in noun_columns)
-                query = f"SELECT DISTINCT {column_names} FROM `{table_name}`"
-                results = self.db_manager.execute_query(query)
-                for row in results:
-                    unique_nouns.update(str(value) for value in row if value)
-
-        return {"unique_nouns": list(unique_nouns)}
-
-    def generate_sql(self, state: dict) -> dict:
+        response = self.llm_manager.invoke(prompt=initial_insight_prompt, schema=schema)
+        print(response)
+        
+        return({"prompt_question": response})
+    
+    def generate_sql_iia(self, state: dict) -> dict:
         """Generate SQL query based on parsed question and unique nouns."""
-        question = state['question']
+        question = state['prompt_question']
         # parsed_question = state['parsed_question']
         # unique_nouns = state['unique_nouns']
 
@@ -112,8 +94,8 @@ class SQLAgent:
             return {"sql_query": "EXPERT_REDIRECT"}
         else:
             return {"sql_query": response}
-
-    def validate_and_fix_sql(self, state: dict) -> dict:
+        
+    def validate_and_fix_sql_iia(self, state: dict) -> dict:
         """Validate and fix the generated SQL query."""
         sql_query = state['sql_query']
 
@@ -187,7 +169,7 @@ For example:
                 "sql_issues": result["issues"]
             }
 
-    def execute_sql(self, state: dict) -> dict:
+    def execute_sql_iia(self, state: dict) -> dict:
         """Execute SQL query and return results."""
         query = state['sql_query']
         print("EXECUTING")
@@ -207,9 +189,9 @@ For example:
         except Exception as e:
             return {"error": str(e)}
 
-    def format_results(self, state: dict) -> dict:
+    def format_results_iia(self, state: dict) -> dict:
         """Format query results into a human-readable response."""
-        question = state['question']
+        question = state['prompt_question']
         results = state['results']
 
         if results == "NOT_RELEVANT":
@@ -226,9 +208,9 @@ For example:
         response = self.llm_manager.invoke(prompt, question=question, results=results)
         return {"answer": response}
 
-    def choose_visualization(self, state: dict) -> dict:
+    def choose_visualization_iia(self, state: dict) -> dict:
         """Choose an appropriate visualization for the data."""
-        question = state['question']
+        question = state['prompt_question']
         results = state['results']
         sql_query = state['sql_query']
 

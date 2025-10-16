@@ -42,6 +42,38 @@ class DataFormatter:
         
         return self._format_other_visualizations(visualization, question, sql_query, results)
     
+    def format_data_for_visualization_iia(self, state: dict) -> dict:
+        """Format the data for the chosen visualization type."""
+        visualization = state['visualization']
+        results = state['results']
+        question = state['prompt_question']
+        sql_query = state['sql_query']
+
+        if visualization == "none":
+            return {"formatted_data_for_visualization": None}
+        
+        if visualization == "scatter":
+            print("viz_detected")
+            try:
+                return self._format_scatter_data(results)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
+        
+        if visualization == "bar" or visualization == "horizontal_bar":
+            print("viz detected")
+            try:
+                return self._format_bar_data(results, question)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
+        
+        if visualization == "line":
+            try:
+                return self._format_line_data(results, question)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
+        
+        return self._format_other_visualizations(visualization, question, sql_query, results)
+    
     def _format_line_data(self, results, question):
         if isinstance(results, str):
             results = eval(results)
@@ -183,7 +215,7 @@ class DataFormatter:
             for i, entry in enumerate(results):
                 # Extract numeric keys dynamically
                 numeric_items = [(k, v) for k, v in entry.items() if isinstance(v, (int, float))]
-                if len(numeric_items) >= 2:
+                if len(numeric_items) == 2:
                     x_key, x_val = numeric_items[0]
                     y_key, y_val = numeric_items[1]
                     formatted_data["series"].append({
@@ -260,6 +292,25 @@ class DataFormatter:
     def make_plotly_go(self, state: dict) -> dict:
             visualization = state["visualization"]
             question = state["question"] 
+            query= state["sql_query"]
+            results = state["results"]
+            formatted_data_for_visualization= state["formatted_data_for_visualization"]
+            """convert visualization into a plotly go json for application"""
+            prompt = ChatPromptTemplate.from_messages([
+                ('''system", "You are a Data expert who turns formatted data into useful plotly.express visualizations. 
+                you are given a list of formatted data for the visualization where the labels and values are defined as well as the type of graph to generate and generate axes labels and legends.
+                You are also given the question the user asks, use this to inform the plot title and any other annotation such as hover_data. 
+                You also have access to the resutls and sql query to further inform your visualization. 
+                You MUST return input in acceptable json form for a go.Figure to be unpacked by the pio.from_json package'''),
+                ("human", 'For the given question: {question}\n\nSQL query: {sql_query}\n\Result: {results}\n\nUse the following formatted data: {formatted_data_for_visualization} to generate a {visualization} as a json go.figure output'),
+            ])
+            response = self.llm_manager.invoke(prompt, question=question, sql_query=query, results=results, visualization=visualization, formatted_data_for_visualization=formatted_data_for_visualization)
+
+            return {"go_figure": response}
+    
+    def make_plotly_go_iia(self, state: dict) -> dict:
+            visualization = state["visualization"]
+            question = state["prompt_question"] 
             query= state["sql_query"]
             results = state["results"]
             formatted_data_for_visualization= state["formatted_data_for_visualization"]

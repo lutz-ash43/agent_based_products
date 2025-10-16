@@ -24,6 +24,7 @@ class OutputState(TypedDict):
     visualization_reason: Annotated[str, operator.add]
     formatted_data_for_visualization: Dict[str, Any]
     go_figure : Dict[str, Any]
+    prompt_question : str
 
 
 class WorkflowState(InputState, OutputState):
