@@ -64,6 +64,7 @@ class SQLAgent:
     def generate_sql(self, state: dict) -> dict:
         """Generate SQL query based on parsed question and unique nouns."""
         question = state['question']
+        product_instructions = state["product"]
         # parsed_question = state['parsed_question']
         # unique_nouns = state['unique_nouns']
 
@@ -77,8 +78,12 @@ class SQLAgent:
                 You are an AI assistant that generates SQL queries based on user questions and database schema. Generate a valid SQL query to answer the user's question.
                 
                 the lab_seg table contains data where each row is a unique assay laboratory combination. 
+
+                {product_instructions}
+
                 Data such as market share, turn around time, and other columns some of which are prefixed by LAB LEVEL are the same for all instances of the same lab. 
                 Other columns pertain to the individual assays each lab offers. Be sure to check that data is not duplicated at the lab level when returning certain results.
+                turn around time or (tat) is the number of days a la requires to return a test result. 
 
                 If there is not enough information to write a SQL query, respond with "NOT_ENOUGH_INFO".
 
@@ -87,8 +92,12 @@ class SQLAgent:
                 [[x, y]]
                 or 
                 [[label, x, y]]
-                            
-                For questions like "plot a distribution of the fares for men and women", count the frequency of each fare and plot it. The x axis should be the fare and the y axis should be the count of people who paid that fare.
+                                            
+                For questions like "what is the distribution efficiency by lab type", because efficiency is a continuous value you will want to calculate the summary stats for each group to plot in a boxplot. 
+                If the questions asks for a distribution of a continuous variable without a specific metric such as average or median specified return the max, 75th percentile, median, 25th percentile, and min of the continuous variable by group for the groups.
+                
+                For questions asking for relative measures such as "most market share" or "top labs by market share" limit to the top 10 of the entities in question. 
+
                 SKIP ALL ROWS WHERE ANY COLUMN IS NULL or "N/A" or "".
                 Just give the query string. Do not format it. Make sure to use the correct spellings of nouns as provided in the unique nouns list. All the table and column names should be enclosed in backticks.
                 
@@ -104,7 +113,7 @@ class SQLAgent:
                 Generate SQL query string'''),
         ])
 
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question) #parsed_question=parsed_question, unique_nouns=unique_nouns)
+        response = self.llm_manager.invoke(prompt, schema=schema, question=question, product_instructions=product_instructions) #parsed_question=parsed_question, unique_nouns=unique_nouns)
         
         if response.strip() == "NOT_ENOUGH_INFO":
             return {"sql_query": "NOT_RELEVANT"}
@@ -126,52 +135,55 @@ class SQLAgent:
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", '''
-You are an AI assistant that validates and fixes SQL queries. Your task is to:
-1. Check if the SQL query is valid.
-2. Ensure all table and column names are correctly spelled and exist in the schema. All the table and column names should be enclosed in backticks.
-3. If there are any issues, fix them and provide the corrected SQL query.
-4. If no issues are found, return the original query.
+            You are an AI assistant that validates and fixes SQL queries. Your task is to:
+            1. Check if the SQL query is valid, all queries should be compatible with SQLite 
+            2. Ensure all table and column names are correctly spelled and exist in the schema. All the table and column names should be enclosed in backticks.
+            3. If there are any issues, fix them and provide the corrected SQL query.
+            4. If no issues are found, return the original query.
+            5. Ensure the each column type is consistent (ex. if a numeric column is aggregated it and used in a where clause it should treated as numeric in both )
 
-Respond in JSON format with the following structure. Only respond with the JSON:
-{{
-    "valid": boolean,
-    "issues": string or null,
-    "corrected_query": string
-}}
-'''),
-            ("human", '''===Database schema:
-{schema}
+            Prioritize simplicity when reviewing queries but ensure to return all results asked for in the initial query
 
-===Generated SQL query:
-{sql_query}
+            Respond in JSON format with the following structure. Only respond with the JSON:
+            {{
+                "valid": boolean,
+                "issues": string or null,
+                "corrected_query": string
+            }}
+            '''),
+                        ("human", '''===Database schema:
+            {schema}
 
-Respond in JSON format with the following structure. Only respond with the JSON:
-{{
-    "valid": boolean,
-    "issues": string or null,
-    "corrected_query": string
-}}
+            ===Generated SQL query:
+            {sql_query}
 
-For example:
-1. {{
-    "valid": true,
-    "issues": null,
-    "corrected_query": "None"
-}}
-             
-2. {{
-    "valid": false,
-    "issues": "Column USERS does not exist",
-    "corrected_query": "SELECT * FROM \`users\` WHERE age > 25"
-}}
+            Respond in JSON format with the following structure. Only respond with the JSON:
+            {{
+                "valid": boolean,
+                "issues": string or null,
+                "corrected_query": string
+            }}
 
-3. {{
-    "valid": false,
-    "issues": "Column names and table names should be enclosed in backticks if they contain spaces or special characters",
-    "corrected_query": "SELECT * FROM \`gross income\` WHERE \`age\` > 25"
-}}
-             
-'''),
+            For example:
+            1. {{
+                "valid": true,
+                "issues": null,
+                "corrected_query": "None"
+            }}
+                        
+            2. {{
+                "valid": false,
+                "issues": "Column USERS does not exist",
+                "corrected_query": "SELECT * FROM \`users\` WHERE age > 25"
+            }}
+
+            3. {{
+                "valid": false,
+                "issues": "Column names and table names should be enclosed in backticks if they contain spaces or special characters",
+                "corrected_query": "SELECT * FROM \`gross income\` WHERE \`age\` > 25"
+            }}
+                        
+            '''),
         ])
 
         output_parser = JsonOutputParser()
@@ -191,8 +203,9 @@ For example:
         """Execute SQL query and return results."""
         query = state['sql_query']
         print("EXECUTING")
-        print(query)
+        #print(query)
         query = re.sub(r"^```sql\s*|\s*```$", "", query)
+        print("should be clean")
         print(query)
         if query == "NOT_RELEVANT":
             return {"results": "NOT_RELEVANT"}
@@ -211,7 +224,7 @@ For example:
         """Format query results into a human-readable response."""
         question = state['question']
         results = state['results']
-
+        
         if results == "NOT_RELEVANT":
             return {"answer": "Sorry, I can only give answers relevant to the database."}
         if results == "EXPERT_REDIRECT":
@@ -246,18 +259,21 @@ For example:
                 - Horizontal Bar Graphs: Best for comparing categorical data or showing changes over time when the number of categories is small or the disparity between categories is large. Use for questions like "Show the revenue of A and B?" or "How does the population of 2 cities compare?" or "How many men and women got promoted?" or "What percentage of men and what percentage of women got promoted?" when the disparity between categories is large.
                 - Scatter Plots: Useful for identifying relationships or correlations between two numerical variables or plotting distributions of data. Best used when both x axis and y axis are continuous. Use for questions like "Plot a distribution of the fares (where the x axis is the fare and the y axis is the count of people who paid that fare)" or "Is there a relationship between advertising spend and sales?" or "How do height and weight correlate in the dataset? Do not use it for questions that do not have a continuous x axis."
                 - Line Graphs: Best for showing trends and distributionsover time. Best used when both x axis and y axis are continuous. Used for questions like "How have website visits changed over the year?" or "What is the trend in temperature over the past decade?". Do not use it for questions that do not have a continuous x axis or a time based x axis.
-
+                - Box Plots : Best for illustrating summary stats of continuous variables between 1 or more groupings. Use for questions like "What is the distribution of scores by subject and grade?" or "What is the distribution of the turn around time by assay class?" or "What is the distribution of market share within commercial labs?"
+                
                 Consider these types of questions when recommending a visualization:
+             
                 1. Aggregations and Summarizations (e.g., "What is the average revenue by month?" - Line Graph)
                 2. Comparisons (e.g., "Compare the sales figures of Product A and Product B over the last year." - Line or Column Graph)
                 3. Plotting Distributions (e.g., "Plot a distribution of the age of users" - Scatter Plot)
                 4. Trends Over Time (e.g., "What is the trend in the number of active users over the past year?" - Line Graph)
                 5. Correlations (e.g., "Is there a correlation between marketing spend and revenue?" - Scatter Plot)
+                6. Descriptive Statistics (eg. "Is there wide variation in market share within lab type") - Boxplot
 
                 Pie charts are not an option
 
                 Provide your response in the following format:
-                Recommended Visualization: [Chart type or "None"]. ONLY use the following names: bar, horizontal_bar, line, scatter, none
+                Recommended Visualization: [Chart type or "None"]. ONLY use the following names: bar, horizontal_bar, line, scatter, box, none
                 Reason: [Brief explanation for your recommendation]
 
             '''),

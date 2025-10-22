@@ -141,11 +141,44 @@ data = {
 // Multiple series can be represented, each as an object in the outer array.
 '''
 
+boxPlotInstruction = '''
+
+  Where data is: {
+    labels: string[]
+    values: {min: number, q1: number, median: number, q3: number, max: number, label: string}[]
+  }
+
+// Examples of usage:
+Each label represents a group or category on the x axis.
+Each object in values represents the box plot statistics for that group.
+
+Here we are looking at the distribution of test scores for different subjects.
+1. data = {
+  labels: ['Math', 'Science', 'History'],
+  values: [
+    {min: 45, q1: 60, median: 70, q3: 80, max: 95, label: 'Math'},
+    {min: 50, q1: 65, median: 75, q3: 85, max: 98, label: 'Science'},
+    {min: 40, q1: 55, median: 65, q3: 75, max: 90, label: 'History'}
+  ]
+}
+
+Here we are comparing the salary distributions between two departments.
+2. data = {
+  labels: ['Engineering', 'Marketing'],
+  values: [
+    {min: 55, q1: 70, median: 85, q3: 95, max: 120, label: 'Engineering'},
+    {min: 40, q1: 55, median: 65, q3: 75, max: 100, label: 'Marketing'}
+  ]
+}
+
+'''
+
 
 graph_instructions = {
     "bar": barGraphIntstruction,
     "horizontal_bar": horizontalBarGraphIntstruction,
     "line": lineGraphIntstruction,
     "pie": pieChartIntstruction,
-    "scatter": scatterPlotIntstruction
+    "scatter": scatterPlotIntstruction,
+    "box" : boxPlotInstruction
 }

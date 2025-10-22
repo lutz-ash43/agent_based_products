@@ -5,11 +5,13 @@ from workflowmanager import WorkflowManager
 import re
 import json
 from run_app_utils import json_to_figure
+from productInstruction import product_instructions
 # for deployment on langgraph cloud
 #graph = WorkflowManager().returnGraph()
 
 # Set up the Streamlit app
-st.title("SQL Query Agent Dashboard")
+st.set_page_config(layout="wide")
+st.title("Agentic Lab Segementation Application MVP")
 
 # TODO establish 1 agent that takes in the data product as an argument is primed with descriptions of products and common insights (maybe project specific)
 # generates 2 questions and returns them
@@ -20,12 +22,19 @@ top_container = st.container()
 bottom_container = st.container()
 manager = WorkflowManager()
 
+# ---- define product type ----
+# TODO make this an argument to app not hardcoded 
+prod = "labSegmentation"
+prodInstructions = product_instructions[prod]
+
 # ---- Initialize session state ----
 def initialize_iia_results():
+    question_list = []
     if "iia_result_1" not in st.session_state:
-        st.session_state.iia_result_1 = manager.run_iia_agent()
+        st.session_state.iia_result_1 = manager.run_iia_agent(question_list, prodInstructions)
+        question_list.append(st.session_state.iia_result_1["prompt_question"])
     if "iia_result_2" not in st.session_state:
-        st.session_state.iia_result_2 = manager.run_iia_agent()
+        st.session_state.iia_result_2 = manager.run_iia_agent(question_list, prodInstructions)
 
 initialize_iia_results()
 
@@ -39,7 +48,7 @@ with top_container:
         st.write(initial_q["prompt_question"])
         iq_json = initial_q.get("go_figure")
         iq_fig = json_to_figure(iq_json)
-        st.subheader("Generated Plot:")
+        #st.subheader(initial_q["answer"])
         st.plotly_chart(go.Figure(iq_fig))
         #st.write(initial_q['prompt_question'])
         st.write(initial_q["answer"])
@@ -49,22 +58,22 @@ with top_container:
         st.write(initial_q2["prompt_question"])
         iq_json = initial_q2.get("go_figure")
         iq_fig = json_to_figure(iq_json)
-        st.subheader("Generated Plot:")
+        #st.subheader(initial_q2["answer"])
         st.plotly_chart(go.Figure(iq_fig))
         #st.write(initial_q['prompt_question'])
         st.write(initial_q2["answer"])
 
 
-# Text input for the user question
-user_question = st.text_input("Enter your question:", "")
-
+    # Text input for the user question
+    user_question = st.text_input("Enter your question:", "")
+    submit_button = st.button("Submit")
 # Button to submit the question
-if st.button("Submit"):
+if submit_button: #st.button("Submit"):
     with bottom_container: 
         if user_question.strip():
             # Build the workflow and process the question
             #manager = WorkflowManager()
-            result = manager.run_sql_agent(question=user_question)
+            result = manager.run_sql_agent(question=user_question, product=prodInstructions)
             print("Workflow result:", result)
             # First check if we redirected them to ISC assistance
             # TODO move the expert redirect keyword to another state attribute to simplify this line 

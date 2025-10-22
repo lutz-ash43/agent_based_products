@@ -77,10 +77,10 @@ class WorkflowManager:
     def returnGraph(self):
         return self.create_workflow().compile()
 
-    def run_sql_agent(self, question: str) -> dict:
+    def run_sql_agent(self, question: str, product : str) -> dict:
         """Run the SQL agent workflow and return the formatted answer and visualization recommendation."""
         app = self.create_workflow().compile()
-        result = app.invoke({"question": question})
+        result = app.invoke({"question": question, "product":product})
         return {
             "answer": result['answer'],
             "visualization": result['visualization'],
@@ -88,9 +88,9 @@ class WorkflowManager:
             "formatted_data_for_visualization": result['formatted_data_for_visualization'],
             "go_figure": result["go_figure"]
         }
-    def run_iia_agent(self):
+    def run_iia_agent(self, question_list : list[str], product : str):
         app = self.create_workflow_iia().compile()
-        result = app.invoke({}) #we need to adjust the output here probably how the iia class is parsing output to establish our json organization
+        result = app.invoke({"question_list":question_list, "product":product}) #we need to adjust the output here probably how the iia class is parsing output to establish our json organization
         print(result)
         return {
             "prompt_question": result['prompt_question'],

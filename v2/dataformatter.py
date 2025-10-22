@@ -40,6 +40,13 @@ class DataFormatter:
             except Exception as e:
                 return self._format_other_visualizations(visualization, question, sql_query, results)
         
+        if visualization == "box":
+            try:
+                print("Box Selected")
+                return self._format_box_data(results)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
+        
         return self._format_other_visualizations(visualization, question, sql_query, results)
     
     def format_data_for_visualization_iia(self, state: dict) -> dict:
@@ -69,6 +76,12 @@ class DataFormatter:
         if visualization == "line":
             try:
                 return self._format_line_data(results, question)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
+
+        if visualization == "box":
+            try:
+                return self._format_box_data(results)
             except Exception as e:
                 return self._format_other_visualizations(visualization, question, sql_query, results)
         
@@ -273,6 +286,145 @@ class DataFormatter:
         return {"formatted_data_for_visualization": formatted_data}
     
 
+    # attempt to allow 3 categories 
+    def _format_bar_data(self, results, question):
+        if isinstance(results, str):
+            results = eval(results)
+            print("results is string:", results)
+
+        if len(results[0]) == 2:
+            print("results is 2D:", results)
+
+            labels = [next(iter(d.values())) for d in results]
+            print("labels:", labels)
+
+            data = [list(d.values())[1] for d in results if len(d) > 1]
+
+            # Use LLM to label the y-axis
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a data labeling expert. Given a question and some data, provide a concise and relevant label for the data series."),
+                ("human", "Question: {question}\nData (first few rows): {data}\n\nProvide a concise label for this y axis."),
+            ])
+            label = self.llm_manager.invoke(prompt, question=question, data=str(results[:2]))
+
+            values = [{"data": data, "label": label}]
+        
+        elif isinstance(results[0], dict) and len(results[0]) == 3:
+            print("results is grouped dict (3 keys):", results)
+
+            # Infer keys
+            sample = results[0]
+            keys = list(sample.keys())
+            color_key = keys[0]
+            label_key = keys[1]
+            value_key = keys[2]
+
+            labels = sorted(list(set(row[label_key] for row in results)))
+            color_groups = sorted(list(set(row[color_key] for row in results)))
+
+            values = []
+            for color_group in color_groups:
+                group_data = []
+                for label in labels:
+                    match = next((row for row in results if row[color_key] == color_group and row[label_key] == label), None)
+                    group_data.append(float(match[value_key]) if match else 0)
+                
+                values.append({
+                    "data": group_data,
+                    "label": color_group,  # Grouping category becomes the label
+                    "color": color_group   # Plotly can use this for categorical color mapping
+                })
+
+        else:
+            raise ValueError("Unexpected data format in results")
+
+        formatted_data = {
+            "labels": labels,
+            "values": values
+        }
+
+        print("Formatted bar chart data:", formatted_data)
+        return {"formatted_data_for_visualization": formatted_data}
+    
+    def _format_box_data(self, results):
+        print("Raw results:", results)
+
+        if isinstance(results, str):
+            print("Results is a string; evaluating...")
+            results = eval(results)
+
+        formatted_data = {"labels": [], "values": []}
+
+        for item in results:
+            try:
+                label = item["laboratory_type"]
+                min_val = item["min_market_share"]
+                q1 = item["q1_market_share"]
+                median = item["median_market_share"]
+                q3 = item["q3_market_share"]
+                max_val = item["max_market_share"]
+            except KeyError as e:
+                raise ValueError(f"Missing expected key in item: {e}")
+
+            value_entry = {
+                "min": float(min_val),
+                "q1": float(q1),
+                "median": float(median),
+                "q3": float(q3),
+                "max": float(max_val),
+                "label": label
+            }
+
+            formatted_data["labels"].append(label)
+            formatted_data["values"].append(value_entry)
+
+        return {"formatted_data_for_visualization": formatted_data}
+
+
+    def _format_box_data(self, results):
+        print("Raw results:", results)
+
+        if isinstance(results, str):
+            print("Results is a string; evaluating...")
+            results = eval(results)
+
+        formatted_data = {"labels": [], "values": []}
+
+        for item in results:
+            if not isinstance(item, dict):
+                raise ValueError(f"Each item must be a dictionary: {item}")
+
+            keys = list(item.keys())
+            values = list(item.values())
+
+            if len(values) < 6:
+                raise ValueError(f"Each item must have at least 6 fields (label, min, q1, median, q3, max): {item}")
+
+            label = keys[0]
+            min_val = values[1]
+            q1 = values[2]
+            median = values[3]
+            q3 = values[4]
+            max_val = values[5]
+
+            if not isinstance(label, str):
+                raise ValueError(f"First value must be a string label: {label}")
+            
+            value_entry = {
+                "min": float(min_val),
+                "q1": float(q1),
+                "median": float(median),
+                "q3": float(q3),
+                "max": float(max_val),
+                "label": label
+            }
+
+            formatted_data["labels"].append(label)
+            formatted_data["values"].append(value_entry)
+
+        return {"formatted_data_for_visualization": formatted_data}
+    
+
     def _format_other_visualizations(self, visualization, question, sql_query, results):
         instructions = graph_instructions[visualization]
         prompt = ChatPromptTemplate.from_messages([
@@ -318,8 +470,11 @@ class DataFormatter:
             prompt = ChatPromptTemplate.from_messages([
                 ('''system", "You are a Data expert who turns formatted data into useful plotly.express visualizations. 
                 you are given a list of formatted data for the visualization where the labels and values are defined as well as the type of graph to generate and generate axes labels and legends.
-                You are also given the question the user asks, use this to inform the plot title and any other annotation such as hover_data. 
-                You also have access to the resutls and sql query to further inform your visualization. 
+                You are also given the question the user asks, use this to inform the plot title and any other annotation such as hover info. 
+                You also have access to the results and sql query to further inform your visualization. 
+                
+                Before returning ensure that all formatting is correct including the string formatting for hoverinfo. The hoverinfo should contain no special characters if different from default.
+                
                 You MUST return input in acceptable json form for a go.Figure to be unpacked by the pio.from_json package'''),
                 ("human", 'For the given question: {question}\n\nSQL query: {sql_query}\n\Result: {results}\n\nUse the following formatted data: {formatted_data_for_visualization} to generate a {visualization} as a json go.figure output'),
             ])

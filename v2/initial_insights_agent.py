@@ -19,10 +19,14 @@ class InitialInsightsAgent:
         """Parse user question and identify relevant tables and columns."""
         schema = self.db_manager.get_schema()
         #plot_tools = [create_bar_chart, create_line_chart, create_scatter_plot]
+        # tracking previously asked questions
+        asked_questions = state['question_list']
+        asked_questions = ','.join(asked_questions)
+        print("asked questions:", asked_questions)
         initial_insight_prompt = ChatPromptTemplate.from_messages([
             ("system", """
         you are a an expert of the lab segmentation data product. This product is a
-        table with lab characteristics such as turna round time, lab type, market share and disease or biomarker relevant market share.
+        table with lab characteristics such as turn a round time, lab type, market share and disease or biomarker relevant market share.
 
         Additionally for each table there is information regarding all the disease or biomarker relevant assays a given lab performs or provides. 
         These characteristics include what classification the assay is, what platform the assay uses if any, how the assay was developed, 
@@ -33,12 +37,14 @@ class InitialInsightsAgent:
 
         using this context and the db provided as generate one question that might be helpful to understanding this database. This question will then be converted to sql and plotted
         so ensure they are reasonable exploratory data question and will not require advanced analytics. 
+        
+        DO NOT asked repeat questions. Questions that have already been asked are : {asked_questions}
         """),
 
             ("human", "generate a question to provide basic insights into this table"),
         ])
 
-        response = self.llm_manager.invoke(prompt=initial_insight_prompt, schema=schema)
+        response = self.llm_manager.invoke(prompt=initial_insight_prompt, schema=schema, asked_questions=asked_questions)
         print(response)
         
         return({"prompt_question": response})
@@ -46,6 +52,7 @@ class InitialInsightsAgent:
     def generate_sql_iia(self, state: dict) -> dict:
         """Generate SQL query based on parsed question and unique nouns."""
         question = state['prompt_question']
+        product_instructions = state["product"]
         # parsed_question = state['parsed_question']
         # unique_nouns = state['unique_nouns']
 
@@ -58,7 +65,10 @@ class InitialInsightsAgent:
             ("system", '''
                 You are an AI assistant that generates SQL queries based on user questions and database schema. Generate a valid SQL query to answer the user's question.
                 
-                the lab_seg table contains data where each row is a unique assay laboratory combination. 
+                the lab_seg table contains data where each row is a unique assay laboratory combination.
+
+                {product_instructions}
+              
                 Data such as market share, turn around time, and other columns some of which are prefixed by LAB LEVEL are the same for all instances of the same lab. 
                 Other columns pertain to the individual assays each lab offers. Be sure to check that data is not duplicated at the lab level when returning certain results.
 
@@ -69,7 +79,7 @@ class InitialInsightsAgent:
                 [[x, y]]
                 or 
                 [[label, x, y]]
-                            
+                
                 For questions like "plot a distribution of the fares for men and women", count the frequency of each fare and plot it. The x axis should be the fare and the y axis should be the count of people who paid that fare.
                 SKIP ALL ROWS WHERE ANY COLUMN IS NULL or "N/A" or "".
                 Just give the query string. Do not format it. Make sure to use the correct spellings of nouns as provided in the unique nouns list. All the table and column names should be enclosed in backticks.
@@ -86,7 +96,7 @@ class InitialInsightsAgent:
                 Generate SQL query string'''),
         ])
 
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question) #parsed_question=parsed_question, unique_nouns=unique_nouns)
+        response = self.llm_manager.invoke(prompt, schema=schema, question=question, product_instructions=product_instructions) #parsed_question=parsed_question, unique_nouns=unique_nouns)
         
         if response.strip() == "NOT_ENOUGH_INFO":
             return {"sql_query": "NOT_RELEVANT"}

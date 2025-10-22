@@ -4,6 +4,8 @@ import operator
 
 class InputState(TypedDict):
     question: str
+    question_list : list[str]
+    product : str
     parsed_question: Dict[str, Any]
     unique_nouns: List[str]
     sql_query: str
@@ -15,6 +17,7 @@ class OutputState(TypedDict):
     #parsed_question: Dict[str, Any]
     #unique_nouns: List[str]
     sql_query: str
+    product : str
     sql_valid: bool
     sql_issues: str
     results: List[Any]
