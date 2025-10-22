@@ -6,7 +6,7 @@ import sqlite3
 from typing import List, Any
 
 class DatabaseManager:
-    def __init__(self, db_path: str = '../lab_seg.db'): #"/Users/ashleylutz/Documents/agent_based_products/lab_seg.db"):
+    def __init__(self, db_path: str = 'lab_seg.db'): #"/Users/ashleylutz/Documents/agent_based_products/lab_seg.db"):
         self.db_path = db_path
         self.connection = self.connect_to_db()
 

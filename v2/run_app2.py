@@ -11,7 +11,7 @@ from productInstruction import product_instructions
 
 # Set up the Streamlit app
 st.set_page_config(layout="wide")
-st.title("Agentic Lab Segementation Application MVP")
+st.title("Agentic Lab Segmentation Application MVP")
 
 # TODO establish 1 agent that takes in the data product as an argument is primed with descriptions of products and common insights (maybe project specific)
 # generates 2 questions and returns them
