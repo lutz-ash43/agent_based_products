@@ -7,7 +7,7 @@ Diaceutics Assay ID	 : Unique Diaceutics code associated with assay
 Laboratory Name : 	"Current operating name of the laboratory. Please note each assay offered by a laboratory has a unique row in the excel file. As such, if the laboratory offers more than one assay of interest (i.e., biomarker, disease indication, method), then the laboratory will be listed multiple times."
 Street : Laboratory address. Where the laboratory is part of a network, this is the address of the headquarters.
 City : Laboratory address. Where the laboratory is part of a network, this is the address of the headquarters.
-Laboratory Typ : "This is determined by Diaceutics based upon how the laboratory describes itself on their website: 
+Laboratory Type : "This is determined by Diaceutics based upon how the laboratory describes itself on their website: 
     - Academic - Associated with higher learning institutions or operating with research purposes. 
     - Hospital - Associated with a non-academic patient treatment facility, typically located in the community setting
     - Commercial - Not associated with the government and is privately owned/funded"
