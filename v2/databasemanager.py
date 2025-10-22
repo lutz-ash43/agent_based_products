@@ -62,6 +62,7 @@ class DatabaseManager:
     def execute_query(self, query: str) -> List[dict]:
         """Execute SQL query and return results as list of dictionaries (like response.json()['results'])."""
         try:
+            print("connected")
             cursor = self.connection.cursor()
             cursor.execute(query)
             columns = [desc[0] for desc in cursor.description]  # Get column names
