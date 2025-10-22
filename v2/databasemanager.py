@@ -65,6 +65,7 @@ class DatabaseManager:
             print("connected")
             cursor = self.connection.cursor()
             cursor.execute(query)
+            print("executed")
             columns = [desc[0] for desc in cursor.description]  # Get column names
             rows = cursor.fetchall()  # Get all rows
             results = [dict(zip(columns, row)) for row in rows]  # Convert to list of dicts
